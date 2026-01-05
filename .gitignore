@@ -1,0 +1,38 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VSCode
+.vscode/
+
+# Build files
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+._*
+
+# Secrets
+config_secret.h
+secrets.h
+*.secret
+
+# Logs
+*.log
+
+# Temporary
+tmp/
+temp/
