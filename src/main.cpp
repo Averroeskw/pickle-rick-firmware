@@ -5,13 +5,14 @@
  * Inspired by M5PORKCHOP - Rebranded Rick & Morty Space Theme
  * "I turned myself into a WiFi security tool, Morty!"
  *
+ * SCROLL NAVIGATION: Use rotary encoder to switch between modes
+ *
  * Copyright (c) 2025 AVERROES Tech Manufacturing
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include <esp_wifi_types.h>
 #include <NimBLEDevice.h>
 #include <TinyGPSPlus.h>
 #include <ArduinoJson.h>
@@ -25,35 +26,19 @@
 #include "config.h"
 #include "core/pickle_rick.h"
 #include "core/xp_system.h"
-#include "core/sdlog.h"
 #include "wifi/wifi_scanner.h"
-#include "wifi/handshake_capture.h"
-#include "wifi/deauth.h"
-#include "ble/ble_spam.h"
-#include "gps/wardriving.h"
-#include "ui/ui_manager.h"
 #include "modes/mode_manager.h"
-
-// =============================================================================
-// FORWARD DECLARATIONS
-// =============================================================================
-void initHardware();
-void initDisplay();
-void initSDCard();
-void initGPS();
-void initLoRa();
-void initBLE();
-void showBootSplash();
-void updateDisplay();
-void handleInput();
-void runCurrentMode();
 
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
 static app_state_t currentState = STATE_BOOT;
-static operation_mode_t currentMode = MODE_MENU;
-static rick_mood_t rickMood = MOOD_DRUNK;  // Classic Rick
+static rick_avatar_t rick;
+static mode_manager_t modeManager;
+static scanner_state_t wifiScanner;
+static xp_stats_t xpStats;
+
+// Hardware status
 static bool sdMounted = false;
 static bool gpsReady = false;
 static bool loraReady = false;
@@ -62,19 +47,12 @@ static bool bleReady = false;
 // GPS instance
 TinyGPSPlus gps;
 
-// XP and gamification
-static uint32_t totalXP = 0;
-static rick_rank_t currentRank = RANK_MORTY;
-
-// Stats
-static uint32_t networksFound = 0;
-static uint32_t handshakesCaptured = 0;
-static uint32_t pmkidsExtracted = 0;
-static uint32_t bleSpamCount = 0;
-static uint32_t loraMessagesSent = 0;
+// Display buffer for status
+static char statusLine[64];
+static char modeLine[64];
 
 // =============================================================================
-// BOOT SEQUENCE
+// BOOT SPLASH - RICK IN BRAILLE
 // =============================================================================
 void showBootSplash() {
     Serial.println();
@@ -102,18 +80,19 @@ void showBootSplash() {
     Serial.println("  ║   AVERROES Tech Manufacturing                             ║");
     Serial.println("  ╚═══════════════════════════════════════════════════════════╝");
     Serial.println();
+    Serial.println("  [SCROLL] Rotary to navigate | [PRESS] Enter mode | [ESC] Back");
+    Serial.println();
 }
 
 // =============================================================================
 // HARDWARE INITIALIZATION
 // =============================================================================
-void initHardware() {
+bool initHardware() {
     Serial.println("[INIT] Initializing K257 hardware...");
 
     if (!instance.begin()) {
         Serial.println("[INIT] ❌ Hardware init failed!");
-        currentState = STATE_ERROR;
-        return;
+        return false;
     }
 
     Serial.println("[INIT] ✅ LilyGoLib initialized");
@@ -126,15 +105,15 @@ void initHardware() {
     instance.attachKeyboardFeedback(HAPTIC_ENABLED, HAPTIC_DURATION_MS);
 
     Serial.println("[INIT] ✅ Display & Input ready");
+    return true;
 }
 
-void initSDCard() {
+bool initSDCard() {
     Serial.println("[INIT] Mounting SD card...");
 
     if (!SD.begin(SD_CS_PIN)) {
         Serial.println("[INIT] ⚠️ SD card not found");
-        sdMounted = false;
-        return;
+        return false;
     }
 
     sdMounted = true;
@@ -147,140 +126,129 @@ void initSDCard() {
     SD.mkdir(DIR_PMKID);
     SD.mkdir(DIR_WARDRIVING);
     SD.mkdir(DIR_LOGS);
-    SD.mkdir(DIR_CONFIG);
-    SD.mkdir(DIR_XP);
-    SD.mkdir(DIR_ACHIEVEMENTS);
 
-    // Load saved XP
-    if (XP_PERSIST_ENABLED) {
-        // TODO: Load XP from SD
-    }
+    return true;
 }
 
-void initGPS() {
+bool initGPS() {
     #if GPS_ENABLED
     Serial.println("[INIT] Initializing GPS...");
-
-    // Enable GPS via expander
-    // instance.expanderWrite(XL_GPS_EN, HIGH);
-
     Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     gpsReady = true;
     Serial.println("[INIT] ✅ GPS UART ready");
+    return true;
     #else
-    Serial.println("[INIT] GPS disabled in config");
+    return false;
     #endif
 }
 
-void initLoRa() {
+bool initLoRa() {
     #if LORA_ENABLED
     Serial.println("[INIT] Initializing LoRa SX1262...");
-
-    // Enable LoRa via expander
-    // instance.expanderWrite(XL_LORA_EN, HIGH);
-
-    // TODO: Initialize RadioLib SX1262
+    // TODO: Initialize RadioLib
     loraReady = true;
     Serial.println("[INIT] ✅ LoRa ready (915 MHz)");
+    return true;
     #else
-    Serial.println("[INIT] LoRa disabled in config");
+    return false;
     #endif
 }
 
-void initBLE() {
+bool initBLE() {
     #if BLE_ENABLED
     Serial.println("[INIT] Initializing BLE (NimBLE)...");
-
     NimBLEDevice::init("PICKLE_RICK");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-
     bleReady = true;
-    Serial.println("[INIT] ✅ BLE ready (Get Schwifty mode available)");
+    Serial.println("[INIT] ✅ BLE ready");
+    return true;
     #else
-    Serial.println("[INIT] BLE disabled in config");
+    return false;
     #endif
 }
 
-// =============================================================================
-// WIFI PROMISCUOUS MODE CALLBACK
-// =============================================================================
-typedef struct {
-    unsigned frame_ctrl:16;
-    unsigned duration_id:16;
-    uint8_t addr1[6];
-    uint8_t addr2[6];
-    uint8_t addr3[6];
-    unsigned sequence_ctrl:16;
-    uint8_t addr4[6];
-} wifi_ieee80211_mac_hdr_t;
-
-typedef struct {
-    wifi_ieee80211_mac_hdr_t hdr;
-    uint8_t payload[0];
-} wifi_ieee80211_packet_t;
-
-void IRAM_ATTR wifiSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
-    if (type != WIFI_PKT_MGMT && type != WIFI_PKT_DATA) return;
-
-    const wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
-    const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *)pkt->payload;
-    const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
-
-    // Check for EAPOL frames (handshake)
-    if (type == WIFI_PKT_DATA) {
-        // TODO: EAPOL detection and capture
+bool initWiFiScanner() {
+    Serial.println("[INIT] Initializing WiFi scanner...");
+    if (!scanner_init(&wifiScanner, 200)) {
+        Serial.println("[INIT] ❌ WiFi scanner init failed!");
+        return false;
     }
-
-    // Check for beacon frames (PMKID in RSN IE)
-    if (type == WIFI_PKT_MGMT) {
-        uint16_t frame_type = hdr->frame_ctrl & 0x00FC;
-        if (frame_type == 0x0080) {  // Beacon
-            // TODO: PMKID extraction
-        }
-    }
+    Serial.println("[INIT] ✅ WiFi scanner ready (200 network capacity)");
+    return true;
 }
 
 // =============================================================================
-// INPUT HANDLING
+// INPUT HANDLING - SCROLL NAVIGATION
 // =============================================================================
 void handleInput() {
-    // Keyboard input
+    // =========================================
+    // ROTARY ENCODER - SCROLL BETWEEN MODES
+    // =========================================
+    RotaryMsg_t msg = instance.getRotary();
+
+    if (msg.dir != ROTARY_DIR_NONE) {
+        if (msg.dir == ROTARY_DIR_UP) {
+            // Scroll UP = Previous mode
+            mode_scroll(&modeManager, -1);
+            instance.vibrator();  // Haptic feedback
+        } else if (msg.dir == ROTARY_DIR_DOWN) {
+            // Scroll DOWN = Next mode
+            mode_scroll(&modeManager, 1);
+            instance.vibrator();  // Haptic feedback
+        }
+        instance.clearRotaryMsg();
+
+        // Print current selection
+        if (modeManager.inMenu) {
+            Serial.printf("\n[MENU] >>> %s %s <<<\n",
+                          MODE_INFO[modeManager.menuIndex].icon,
+                          MODE_INFO[modeManager.menuIndex].name);
+            Serial.printf("[MENU]     %s\n", MODE_INFO[modeManager.menuIndex].description);
+        }
+    }
+
+    // Rotary button press = SELECT
+    if (msg.centerBtnPressed) {
+        mode_select(&modeManager);
+        instance.vibrator();
+        instance.clearRotaryMsg();
+    }
+
+    // =========================================
+    // KEYBOARD INPUT
+    // =========================================
     char key;
     if (instance.getKeyChar(&key) > 0) {
-        Serial.printf("[INPUT] Key: 0x%02X ('%c')\n", key, key);
-
         switch (key) {
-            case KEY_MENU_ESC:
-                if (currentMode != MODE_MENU) {
-                    currentMode = MODE_MENU;
-                    currentState = STATE_MENU;
+            case KEY_MENU_ESC:  // ESC - Back to menu
+                mode_back(&modeManager);
+                instance.vibrator();
+                break;
+
+            case KEY_SELECT_ENTER:  // ENTER - Select
+                mode_select(&modeManager);
+                instance.vibrator();
+                break;
+
+            case KEY_ACTION_SPACE:  // SPACE - Mode action
+                // Mode-specific action
+                if (modeManager.currentMode == MODE_PORTAL && !wifiScanner.isScanning) {
+                    scanner_start(&wifiScanner);
+                } else if (modeManager.currentMode == MODE_PORTAL && wifiScanner.isScanning) {
+                    scanner_stop(&wifiScanner);
                 }
                 break;
 
-            case KEY_SELECT_ENTER:
-                // Select current menu item
+            case 'r':  // R - Randomize MAC
+            case 'R':
+                scanner_randomize_mac();
                 break;
 
-            case KEY_ACTION_SPACE:
-                // Mode-specific action
+            case 'c':  // C - Clear networks
+            case 'C':
+                scanner_clear(&wifiScanner);
                 break;
         }
-    }
-
-    // Rotary encoder
-    RotaryMsg_t msg = instance.getRotary();
-    if (msg.dir != ROTARY_DIR_NONE) {
-        if (msg.dir == ROTARY_DIR_UP) {
-            // Navigate up/next
-        } else if (msg.dir == ROTARY_DIR_DOWN) {
-            // Navigate down/prev
-        }
-        instance.clearRotaryMsg();
-    }
-
-    if (msg.centerBtnPressed) {
-        // Select/confirm
-        instance.clearRotaryMsg();
     }
 }
 
@@ -288,52 +256,39 @@ void handleInput() {
 // MODE EXECUTION
 // =============================================================================
 void runCurrentMode() {
-    switch (currentMode) {
+    switch (modeManager.currentMode) {
         case MODE_MENU:
-            // Main menu - Rick's Garage
+            // Main menu - show current selection
             break;
 
         case MODE_PORTAL:
             // WiFi scanning - Portal Gun mode
-            // wifi_scanner_tick();
+            scanner_tick(&wifiScanner);
             break;
 
         case MODE_INTERDIMENSIONAL:
-            // Handshake capture - Interdimensional Cable
-            // handshake_capture_tick();
+            // Handshake capture
+            // TODO: handshake_tick()
             break;
 
         case MODE_SCHWIFTY:
-            // BLE spam - Get Schwifty
-            // ble_spam_tick();
+            // BLE spam
+            // TODO: ble_spam_tick()
             break;
 
         case MODE_WUBBA_LUBBA:
-            // Wardriving - Wubba Lubba Dub Dub
-            // wardriving_tick();
-            break;
-
-        case MODE_CHILL:
-            // Passive mode - Chill with Unity
+            // Wardriving
+            // TODO: wardrive_tick()
             break;
 
         case MODE_SPECTRUM:
-            // Spectrum analyzer - Microverse
-            // spectrum_tick();
+            // Spectrum analyzer
+            // TODO: spectrum_tick()
             break;
 
         case MODE_LORA_MESH:
-            // LoRa mesh - Council of Ricks
-            // lora_mesh_tick();
-            break;
-
-        case MODE_PLUMBUS:
-            // File manager - Plumbus Commander
-            // file_manager_tick();
-            break;
-
-        case MODE_SETTINGS:
-            // Settings - Garage Workshop
+            // LoRa mesh
+            // TODO: lora_tick()
             break;
 
         default:
@@ -355,41 +310,107 @@ void updateGPS() {
 // =============================================================================
 // XP SYSTEM
 // =============================================================================
-void awardXP(uint32_t amount) {
-    // Apply mood modifier
-    float modifier = 1.0f;
-    switch (rickMood) {
-        case MOOD_GENIUS:      modifier = 1.2f; break;
-        case MOOD_PICKLE:      modifier = 1.5f; break;
-        case MOOD_DEPRESSED:   modifier = 0.9f; break;
-        default:               modifier = 1.0f; break;
-    }
+void awardXP(uint32_t amount, const char* reason) {
+    float modifier = rick_get_xp_multiplier(&rick);
+    uint32_t awarded = (uint32_t)(amount * modifier);
 
-    totalXP += (uint32_t)(amount * modifier);
+    xpStats.totalXP += awarded;
+    rick.xp = xpStats.totalXP;
 
     // Check for rank up
-    // TODO: Rank calculation
+    rick_rank_t newRank = rick_calculate_rank(xpStats.totalXP);
+    if (newRank > rick.rank) {
+        rick.rank = newRank;
+        Serial.printf("\n[RANK UP] 🎉 %s %s!\n",
+                      rick_rank_icon(newRank),
+                      rick_rank_name(newRank));
+        instance.vibrator();
+        delay(100);
+        instance.vibrator();
+    }
 
-    Serial.printf("[XP] +%d (Total: %d, Rank: %d)\n",
-                  (int)(amount * modifier), totalXP, currentRank);
+    Serial.printf("[XP] +%d (%s) | Total: %d | Rank: %s\n",
+                  awarded, reason, xpStats.totalXP, rick_rank_name(rick.rank));
 }
 
 // =============================================================================
-// DISPLAY UPDATE
+// STATUS DISPLAY
 // =============================================================================
-void updateDisplay() {
-    // TODO: LVGL UI update
-    // For now, just log state
-    static unsigned long lastLog = 0;
-    if (millis() - lastLog > 5000) {
-        lastLog = millis();
-        Serial.printf("[STATUS] Mode: %s | XP: %d | Rank: %d | GPS: %s | LoRa: %s\n",
-                      MODE_NAMES[currentMode],
-                      totalXP,
-                      currentRank,
-                      gpsReady ? "OK" : "OFF",
-                      loraReady ? "OK" : "OFF");
+void showStatus() {
+    static unsigned long lastStatus = 0;
+    if (millis() - lastStatus < 2000) return;
+    lastStatus = millis();
+
+    Serial.println();
+    Serial.println("╔══════════════════════════════════════════════════════════════╗");
+
+    // Current mode
+    snprintf(modeLine, sizeof(modeLine), "║ %s %-20s                            ║",
+             MODE_INFO[modeManager.currentMode].icon,
+             MODE_INFO[modeManager.currentMode].name);
+    Serial.println(modeLine);
+
+    Serial.println("╠══════════════════════════════════════════════════════════════╣");
+
+    // Status line
+    snprintf(statusLine, sizeof(statusLine),
+             "║ XP: %-6d | Rank: %-12s | Mood: %-8s        ║",
+             xpStats.totalXP,
+             rick_rank_name(rick.rank),
+             rick.mood == MOOD_DRUNK ? "Drunk" :
+             rick.mood == MOOD_GENIUS ? "Genius" :
+             rick.mood == MOOD_ANGRY ? "Angry" : "Normal");
+    Serial.println(statusLine);
+
+    // Hardware status
+    Serial.printf("║ SD: %s | GPS: %s | LoRa: %s | BLE: %s                   ║\n",
+                  sdMounted ? "✅" : "❌",
+                  gpsReady ? "✅" : "❌",
+                  loraReady ? "✅" : "❌",
+                  bleReady ? "✅" : "❌");
+
+    // Mode-specific status
+    if (modeManager.currentMode == MODE_PORTAL) {
+        Serial.printf("║ Networks: %-4d | Channel: %-2d | Scanning: %-3s              ║\n",
+                      wifiScanner.count,
+                      wifiScanner.currentChannel,
+                      wifiScanner.isScanning ? "YES" : "NO");
     }
+
+    Serial.println("╚══════════════════════════════════════════════════════════════╝");
+
+    // Menu hint when in menu
+    if (modeManager.inMenu) {
+        Serial.println("\n[SCROLL to select] [PRESS to enter] [ESC to back]");
+        Serial.printf("\n>>> %s %s - %s\n",
+                      MODE_INFO[modeManager.menuIndex].icon,
+                      MODE_INFO[modeManager.menuIndex].name,
+                      MODE_INFO[modeManager.menuIndex].description);
+    }
+}
+
+// =============================================================================
+// PRINT MENU
+// =============================================================================
+void printMenu() {
+    Serial.println("\n╔════════════════════════════════════════╗");
+    Serial.println("║          🏠 RICK'S GARAGE              ║");
+    Serial.println("╠════════════════════════════════════════╣");
+
+    for (int i = 1; i < MODE_COUNT; i++) {
+        if (i == modeManager.menuIndex) {
+            Serial.printf("║ >> %s %-20s <<      ║\n",
+                          MODE_INFO[i].icon, MODE_INFO[i].name);
+        } else {
+            Serial.printf("║    %s %-20s         ║\n",
+                          MODE_INFO[i].icon, MODE_INFO[i].name);
+        }
+    }
+
+    Serial.println("╚════════════════════════════════════════╝");
+    Serial.printf("\nSelected: %s - %s\n",
+                  MODE_INFO[modeManager.menuIndex].name,
+                  MODE_INFO[modeManager.menuIndex].description);
 }
 
 // =============================================================================
@@ -401,37 +422,45 @@ void setup() {
 
     showBootSplash();
 
-    Serial.println("[BOOT] Starting Pickle Rick firmware...");
-    Serial.println();
+    Serial.println("[BOOT] Starting Pickle Rick firmware...\n");
 
     // Initialize hardware
-    initHardware();
-    if (currentState == STATE_ERROR) {
+    if (!initHardware()) {
         Serial.println("[BOOT] ❌ Boot failed - hardware error");
+        currentState = STATE_ERROR;
         return;
     }
 
+    // Initialize subsystems
     initSDCard();
     initGPS();
     initLoRa();
     initBLE();
+    initWiFiScanner();
+
+    // Initialize Rick avatar
+    rick_init(&rick);
+
+    // Initialize XP
+    xp_init(&xpStats);
+
+    // Initialize mode manager
+    mode_init(&modeManager);
 
     // Set initial state
     currentState = STATE_MENU;
-    currentMode = MODE_MENU;
-    rickMood = MOOD_DRUNK;  // Classic Rick
 
     // Award first boot XP
-    if (totalXP == 0) {
-        awardXP(100);  // "Wubba Lubba Dub Dub" achievement
-        Serial.println("[ACHIEVEMENT] 🏆 Wubba Lubba Dub Dub - First Boot!");
+    if (xpStats.totalXP == 0) {
+        awardXP(100, "First Boot - Wubba Lubba Dub Dub!");
     }
 
-    Serial.println();
-    Serial.println("[BOOT] ✅ Pickle Rick ready!");
+    Serial.println("\n[BOOT] ✅ Pickle Rick ready!");
     Serial.println("[BOOT] \"Nobody exists on purpose. Nobody belongs anywhere.");
-    Serial.println("        Everybody's gonna die. Come wardrive with me.\"");
-    Serial.println();
+    Serial.println("        Everybody's gonna die. Come wardrive with me.\"\n");
+
+    // Print initial menu
+    printMenu();
 
     // Haptic feedback for boot complete
     instance.vibrator();
@@ -444,18 +473,21 @@ void loop() {
     // Run LilyGo event loop
     instance.loop();
 
-    // Handle inputs
+    // Handle inputs (scroll navigation)
     handleInput();
 
     // Update GPS
     updateGPS();
 
+    // Update Rick avatar
+    rick_update_animation(&rick);
+
     // Run current mode
     runCurrentMode();
 
-    // Update display (LVGL)
-    updateDisplay();
+    // Show status periodically
+    showStatus();
 
-    // Small delay to prevent busy-looping
+    // Small delay
     delay(10);
 }
