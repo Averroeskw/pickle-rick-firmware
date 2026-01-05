@@ -27,6 +27,8 @@
 #include "core/xp_system.h"
 #include "wifi/wifi_scanner.h"
 #include "modes/mode_manager.h"
+#include "ui/ui_manager.h"
+#include "ui/ui_theme.h"
 
 // =============================================================================
 // GLOBAL STATE
@@ -43,6 +45,10 @@ static bool gpsReady = false;
 static bool loraReady = false;
 static bool bleReady = false;
 static bool kbReady = false;
+static bool uiReady = false;
+
+// UI state
+static ui_state_t uiState;
 
 // GPS instance
 TinyGPSPlus gps;
@@ -225,6 +231,17 @@ bool initWiFiScanner() {
         return false;
     }
     Serial.println("[INIT] ✅ WiFi scanner ready (200 network capacity)");
+    return true;
+}
+
+bool initUI() {
+    Serial.println("[INIT] Initializing LVGL UI...");
+    if (!ui_init(&uiState, &rick)) {
+        Serial.println("[INIT] ❌ UI init failed!");
+        return false;
+    }
+    uiReady = true;
+    Serial.println("[INIT] ✅ LVGL UI ready");
     return true;
 }
 
@@ -500,6 +517,7 @@ void setup() {
     initLoRa();
     initBLE();
     initWiFiScanner();
+    initUI();  // Initialize LVGL display
 
     // Initialize Rick avatar
     rick_init(&rick);
@@ -529,6 +547,11 @@ void setup() {
 // MAIN LOOP
 // =============================================================================
 void loop() {
+    // Update LVGL (must be called frequently)
+    if (uiReady) {
+        ui_update(&uiState);
+    }
+
     // Handle inputs (scroll navigation)
     handleInput();
 
@@ -541,8 +564,8 @@ void loop() {
     // Run current mode
     runCurrentMode();
 
-    // Show status periodically
+    // Show status periodically (serial only)
     showStatus();
 
-    delay(10);
+    delay(5);  // Short delay for LVGL responsiveness
 }
