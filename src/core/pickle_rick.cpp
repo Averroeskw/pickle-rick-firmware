@@ -4,6 +4,7 @@
  */
 
 #include "pickle_rick.h"
+#include "xp_system.h"
 #include <stdlib.h>
 
 // =============================================================================

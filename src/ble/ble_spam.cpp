@@ -169,7 +169,7 @@ void ble_spam_apple(ble_spam_state_t* state) {
     }
 
     NimBLEAdvertisementData advData;
-    advData.addData(std::string((char*)appleData, dataLen));
+    advData.addData(appleData, dataLen);
 
     pAdvertising->setAdvertisementData(advData);
     pAdvertising->start();
@@ -210,7 +210,7 @@ void ble_spam_android(ble_spam_state_t* state) {
     fastPairData[dataLen++] = 0x00;
 
     NimBLEAdvertisementData advData;
-    advData.addData(std::string((char*)fastPairData, dataLen));
+    advData.addData(fastPairData, dataLen);
 
     pAdvertising->setAdvertisementData(advData);
     pAdvertising->start();
@@ -253,7 +253,7 @@ void ble_spam_samsung(ble_spam_state_t* state) {
     }
 
     NimBLEAdvertisementData advData;
-    advData.addData(std::string((char*)samsungData, dataLen));
+    advData.addData(samsungData, dataLen);
 
     pAdvertising->setAdvertisementData(advData);
     pAdvertising->start();
@@ -292,7 +292,7 @@ void ble_spam_windows(ble_spam_state_t* state) {
     dataLen += nameLen;
 
     NimBLEAdvertisementData advData;
-    advData.addData(std::string((char*)windowsData, dataLen));
+    advData.addData(windowsData, dataLen);
 
     pAdvertising->setAdvertisementData(advData);
     pAdvertising->start();

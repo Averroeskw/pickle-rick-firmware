@@ -29,9 +29,13 @@
 // =============================================================================
 // HARDWARE PINS (FROM K257 PAGER-AI BASE)
 // =============================================================================
-// Display - ST7796
+// Display - ST7796 (sizes defined in pins_arduino.h)
+#ifndef DISP_WIDTH
 #define DISP_WIDTH          222
+#endif
+#ifndef DISP_HEIGHT
 #define DISP_HEIGHT         480
+#endif
 #define DISP_ROTATION       0
 #define DISP_BL_PIN         42
 #define DISP_CS_PIN         38

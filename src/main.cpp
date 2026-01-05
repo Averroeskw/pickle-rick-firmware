@@ -18,9 +18,8 @@
 #include <ArduinoJson.h>
 #include <SD.h>
 #include <SPI.h>
-
-// LilyGo library for K257 hardware
-#include <LilyGoLib.h>
+#include <Wire.h>
+#include <Adafruit_TCA8418.h>
 
 // Local includes
 #include "config.h"
@@ -43,13 +42,46 @@ static bool sdMounted = false;
 static bool gpsReady = false;
 static bool loraReady = false;
 static bool bleReady = false;
+static bool kbReady = false;
 
 // GPS instance
 TinyGPSPlus gps;
 
+// Keyboard controller
+Adafruit_TCA8418 keyboard;
+
+// Rotary encoder state
+static volatile int rotaryPosition = 0;
+static volatile bool rotaryPressed = false;
+static int lastRotaryA = HIGH;
+
 // Display buffer for status
 static char statusLine[64];
 static char modeLine[64];
+
+// Forward declarations
+void printMenu();
+
+// =============================================================================
+// ROTARY ENCODER ISR
+// =============================================================================
+void IRAM_ATTR rotaryISR() {
+    int a = digitalRead(ROTARY_A_PIN);
+    int b = digitalRead(ROTARY_B_PIN);
+
+    if (a != lastRotaryA) {
+        if (b != a) {
+            rotaryPosition++;
+        } else {
+            rotaryPosition--;
+        }
+        lastRotaryA = a;
+    }
+}
+
+void IRAM_ATTR rotaryButtonISR() {
+    rotaryPressed = true;
+}
 
 // =============================================================================
 // BOOT SPLASH - RICK IN BRAILLE
@@ -87,31 +119,50 @@ void showBootSplash() {
 // =============================================================================
 // HARDWARE INITIALIZATION
 // =============================================================================
-bool initHardware() {
-    Serial.println("[INIT] Initializing K257 hardware...");
+bool initI2C() {
+    Serial.println("[INIT] Initializing I2C bus...");
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);
+    Serial.println("[INIT] ✅ I2C ready");
+    return true;
+}
 
-    if (!instance.begin()) {
-        Serial.println("[INIT] ❌ Hardware init failed!");
+bool initKeyboard() {
+    Serial.println("[INIT] Initializing keyboard (TCA8418)...");
+
+    if (!keyboard.begin(TCA8418_I2C_ADDR, &Wire)) {
+        Serial.println("[INIT] ⚠️ Keyboard not found");
         return false;
     }
 
-    Serial.println("[INIT] ✅ LilyGoLib initialized");
+    // Configure keyboard matrix (adjust for actual layout)
+    keyboard.matrix(7, 7);  // 7x7 matrix
+    keyboard.flush();
 
-    // Configure display
-    instance.setBrightness(DISP_BRIGHTNESS);
-    instance.setRotation(DISP_ROTATION);
+    kbReady = true;
+    Serial.println("[INIT] ✅ Keyboard ready");
+    return true;
+}
 
-    // Enable keyboard with haptic
-    instance.attachKeyboardFeedback(HAPTIC_ENABLED, HAPTIC_DURATION_MS);
+bool initRotaryEncoder() {
+    Serial.println("[INIT] Initializing rotary encoder...");
 
-    Serial.println("[INIT] ✅ Display & Input ready");
+    pinMode(ROTARY_A_PIN, INPUT_PULLUP);
+    pinMode(ROTARY_B_PIN, INPUT_PULLUP);
+    pinMode(ROTARY_BTN_PIN, INPUT_PULLUP);
+
+    attachInterrupt(digitalPinToInterrupt(ROTARY_A_PIN), rotaryISR, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(ROTARY_BTN_PIN), rotaryButtonISR, FALLING);
+
+    Serial.println("[INIT] ✅ Rotary encoder ready");
     return true;
 }
 
 bool initSDCard() {
     Serial.println("[INIT] Mounting SD card...");
 
-    if (!SD.begin(SD_CS_PIN)) {
+    SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+
+    if (!SD.begin(SD_CS_PIN, SPI)) {
         Serial.println("[INIT] ⚠️ SD card not found");
         return false;
     }
@@ -145,7 +196,7 @@ bool initGPS() {
 bool initLoRa() {
     #if LORA_ENABLED
     Serial.println("[INIT] Initializing LoRa SX1262...");
-    // TODO: Initialize RadioLib
+    // TODO: Initialize RadioLib with SX1262
     loraReady = true;
     Serial.println("[INIT] ✅ LoRa ready (915 MHz)");
     return true;
@@ -181,22 +232,21 @@ bool initWiFiScanner() {
 // INPUT HANDLING - SCROLL NAVIGATION
 // =============================================================================
 void handleInput() {
+    static int lastPosition = 0;
+
     // =========================================
     // ROTARY ENCODER - SCROLL BETWEEN MODES
     // =========================================
-    RotaryMsg_t msg = instance.getRotary();
-
-    if (msg.dir != ROTARY_DIR_NONE) {
-        if (msg.dir == ROTARY_DIR_UP) {
-            // Scroll UP = Previous mode
-            mode_scroll(&modeManager, -1);
-            instance.vibrator();  // Haptic feedback
-        } else if (msg.dir == ROTARY_DIR_DOWN) {
+    int delta = rotaryPosition - lastPosition;
+    if (delta != 0) {
+        if (delta > 0) {
             // Scroll DOWN = Next mode
             mode_scroll(&modeManager, 1);
-            instance.vibrator();  // Haptic feedback
+        } else {
+            // Scroll UP = Previous mode
+            mode_scroll(&modeManager, -1);
         }
-        instance.clearRotaryMsg();
+        lastPosition = rotaryPosition;
 
         // Print current selection
         if (modeManager.inMenu) {
@@ -208,45 +258,76 @@ void handleInput() {
     }
 
     // Rotary button press = SELECT
-    if (msg.centerBtnPressed) {
+    if (rotaryPressed) {
         mode_select(&modeManager);
-        instance.vibrator();
-        instance.clearRotaryMsg();
+        rotaryPressed = false;
     }
 
     // =========================================
     // KEYBOARD INPUT
     // =========================================
-    char key;
-    if (instance.getKeyChar(&key) > 0) {
-        switch (key) {
-            case KEY_MENU_ESC:  // ESC - Back to menu
-                mode_back(&modeManager);
-                instance.vibrator();
-                break;
+    if (kbReady && keyboard.available() > 0) {
+        uint8_t k = keyboard.getEvent();
+        if (k & 0x80) {  // Key press (not release)
+            uint8_t key = k & 0x7F;
 
-            case KEY_SELECT_ENTER:  // ENTER - Select
+            switch (key) {
+                case 0x1B:  // ESC - Back to menu
+                    mode_back(&modeManager);
+                    break;
+
+                case 0x0D:  // ENTER - Select
+                    mode_select(&modeManager);
+                    break;
+
+                case ' ':  // SPACE - Mode action
+                    if (modeManager.currentMode == MODE_PORTAL && !wifiScanner.isScanning) {
+                        scanner_start(&wifiScanner);
+                    } else if (modeManager.currentMode == MODE_PORTAL && wifiScanner.isScanning) {
+                        scanner_stop(&wifiScanner);
+                    }
+                    break;
+
+                case 'r':  // R - Randomize MAC
+                case 'R':
+                    scanner_randomize_mac();
+                    break;
+
+                case 'c':  // C - Clear networks
+                case 'C':
+                    scanner_clear(&wifiScanner);
+                    break;
+            }
+        }
+    }
+
+    // Serial keyboard fallback
+    if (Serial.available() > 0) {
+        char c = Serial.read();
+        switch (c) {
+            case 'n': case 'N':  // Next mode
+                mode_scroll(&modeManager, 1);
+                break;
+            case 'p': case 'P':  // Prev mode
+                mode_scroll(&modeManager, -1);
+                break;
+            case '\r': case '\n':  // Enter
                 mode_select(&modeManager);
-                instance.vibrator();
                 break;
-
-            case KEY_ACTION_SPACE:  // SPACE - Mode action
-                // Mode-specific action
-                if (modeManager.currentMode == MODE_PORTAL && !wifiScanner.isScanning) {
-                    scanner_start(&wifiScanner);
-                } else if (modeManager.currentMode == MODE_PORTAL && wifiScanner.isScanning) {
-                    scanner_stop(&wifiScanner);
+            case 'b': case 'B': case 27:  // Back/ESC
+                mode_back(&modeManager);
+                break;
+            case ' ':  // Space - action
+                if (modeManager.currentMode == MODE_PORTAL) {
+                    if (!wifiScanner.isScanning) scanner_start(&wifiScanner);
+                    else scanner_stop(&wifiScanner);
                 }
                 break;
-
-            case 'r':  // R - Randomize MAC
-            case 'R':
+            case 'r': case 'R':
                 scanner_randomize_mac();
                 break;
-
-            case 'c':  // C - Clear networks
-            case 'C':
-                scanner_clear(&wifiScanner);
+            case 'm': case 'M':
+                printMenu();
                 break;
         }
     }
@@ -258,36 +339,29 @@ void handleInput() {
 void runCurrentMode() {
     switch (modeManager.currentMode) {
         case MODE_MENU:
-            // Main menu - show current selection
             break;
 
         case MODE_PORTAL:
-            // WiFi scanning - Portal Gun mode
             scanner_tick(&wifiScanner);
             break;
 
         case MODE_INTERDIMENSIONAL:
-            // Handshake capture
             // TODO: handshake_tick()
             break;
 
         case MODE_SCHWIFTY:
-            // BLE spam
             // TODO: ble_spam_tick()
             break;
 
         case MODE_WUBBA_LUBBA:
-            // Wardriving
             // TODO: wardrive_tick()
             break;
 
         case MODE_SPECTRUM:
-            // Spectrum analyzer
             // TODO: spectrum_tick()
             break;
 
         case MODE_LORA_MESH:
-            // LoRa mesh
             // TODO: lora_tick()
             break;
 
@@ -324,9 +398,6 @@ void awardXP(uint32_t amount, const char* reason) {
         Serial.printf("\n[RANK UP] 🎉 %s %s!\n",
                       rick_rank_icon(newRank),
                       rick_rank_name(newRank));
-        instance.vibrator();
-        delay(100);
-        instance.vibrator();
     }
 
     Serial.printf("[XP] +%d (%s) | Total: %d | Rank: %s\n",
@@ -344,7 +415,6 @@ void showStatus() {
     Serial.println();
     Serial.println("╔══════════════════════════════════════════════════════════════╗");
 
-    // Current mode
     snprintf(modeLine, sizeof(modeLine), "║ %s %-20s                            ║",
              MODE_INFO[modeManager.currentMode].icon,
              MODE_INFO[modeManager.currentMode].name);
@@ -352,7 +422,6 @@ void showStatus() {
 
     Serial.println("╠══════════════════════════════════════════════════════════════╣");
 
-    // Status line
     snprintf(statusLine, sizeof(statusLine),
              "║ XP: %-6d | Rank: %-12s | Mood: %-8s        ║",
              xpStats.totalXP,
@@ -362,14 +431,13 @@ void showStatus() {
              rick.mood == MOOD_ANGRY ? "Angry" : "Normal");
     Serial.println(statusLine);
 
-    // Hardware status
-    Serial.printf("║ SD: %s | GPS: %s | LoRa: %s | BLE: %s                   ║\n",
-                  sdMounted ? "✅" : "❌",
-                  gpsReady ? "✅" : "❌",
-                  loraReady ? "✅" : "❌",
-                  bleReady ? "✅" : "❌");
+    Serial.printf("║ SD: %s | GPS: %s | LoRa: %s | BLE: %s | KB: %s              ║\n",
+                  sdMounted ? "OK" : "--",
+                  gpsReady ? "OK" : "--",
+                  loraReady ? "OK" : "--",
+                  bleReady ? "OK" : "--",
+                  kbReady ? "OK" : "--");
 
-    // Mode-specific status
     if (modeManager.currentMode == MODE_PORTAL) {
         Serial.printf("║ Networks: %-4d | Channel: %-2d | Scanning: %-3s              ║\n",
                       wifiScanner.count,
@@ -379,9 +447,8 @@ void showStatus() {
 
     Serial.println("╚══════════════════════════════════════════════════════════════╝");
 
-    // Menu hint when in menu
     if (modeManager.inMenu) {
-        Serial.println("\n[SCROLL to select] [PRESS to enter] [ESC to back]");
+        Serial.println("\n[N/P] Navigate | [ENTER] Select | [B] Back | [M] Menu");
         Serial.printf("\n>>> %s %s - %s\n",
                       MODE_INFO[modeManager.menuIndex].icon,
                       MODE_INFO[modeManager.menuIndex].name,
@@ -394,7 +461,7 @@ void showStatus() {
 // =============================================================================
 void printMenu() {
     Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║          🏠 RICK'S GARAGE              ║");
+    Serial.println("║          RICK'S GARAGE                 ║");
     Serial.println("╠════════════════════════════════════════╣");
 
     for (int i = 1; i < MODE_COUNT; i++) {
@@ -425,13 +492,9 @@ void setup() {
     Serial.println("[BOOT] Starting Pickle Rick firmware...\n");
 
     // Initialize hardware
-    if (!initHardware()) {
-        Serial.println("[BOOT] ❌ Boot failed - hardware error");
-        currentState = STATE_ERROR;
-        return;
-    }
-
-    // Initialize subsystems
+    initI2C();
+    initKeyboard();
+    initRotaryEncoder();
     initSDCard();
     initGPS();
     initLoRa();
@@ -455,24 +518,17 @@ void setup() {
         awardXP(100, "First Boot - Wubba Lubba Dub Dub!");
     }
 
-    Serial.println("\n[BOOT] ✅ Pickle Rick ready!");
-    Serial.println("[BOOT] \"Nobody exists on purpose. Nobody belongs anywhere.");
-    Serial.println("        Everybody's gonna die. Come wardrive with me.\"\n");
+    Serial.println("\n[BOOT] Pickle Rick ready!");
+    Serial.println("[BOOT] \"Nobody exists on purpose. Come wardrive with me.\"\n");
 
     // Print initial menu
     printMenu();
-
-    // Haptic feedback for boot complete
-    instance.vibrator();
 }
 
 // =============================================================================
 // MAIN LOOP
 // =============================================================================
 void loop() {
-    // Run LilyGo event loop
-    instance.loop();
-
     // Handle inputs (scroll navigation)
     handleInput();
 
@@ -488,6 +544,5 @@ void loop() {
     // Show status periodically
     showStatus();
 
-    // Small delay
     delay(10);
 }
