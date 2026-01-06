@@ -38,18 +38,18 @@ typedef struct {
     bool requiresLoRa;
 } mode_info_t;
 
-// Mode definitions
+// Mode definitions - Using ASCII icons (emojis crash ESP32)
 static const mode_info_t MODE_INFO[] = {
-    {MODE_MENU,             "RICK'S GARAGE",        "🏠", "Main Menu",                    false, false, false},
-    {MODE_PORTAL,           "PORTAL GUN",           "🌀", "WiFi Scanning",                false, false, false},
-    {MODE_INTERDIMENSIONAL, "INTERDIMENSIONAL",     "📺", "Handshake Capture",            false, true,  false},
-    {MODE_SCHWIFTY,         "GET SCHWIFTY",         "🎵", "BLE Spam Attack",              false, false, false},
-    {MODE_WUBBA_LUBBA,      "WUBBA LUBBA",          "🚗", "GPS Wardriving",               true,  true,  false},
-    {MODE_CHILL,            "CHILL MODE",           "😌", "Passive Observation",          false, false, false},
-    {MODE_SPECTRUM,         "MICROVERSE",           "🔬", "Spectrum Analyzer",            false, false, false},
-    {MODE_LORA_MESH,        "COUNCIL OF RICKS",     "👥", "LoRa Mesh Network",            false, false, true},
-    {MODE_PLUMBUS,          "PLUMBUS CMD",          "🔧", "File Manager",                 false, true,  false},
-    {MODE_SETTINGS,         "WORKSHOP",             "⚙️", "Settings",                     false, false, false},
+    {MODE_MENU,             "RICK'S GARAGE",        "[H]", "Main Menu",                    false, false, false},
+    {MODE_PORTAL,           "PORTAL GUN",           "[P]", "WiFi Scanning",                false, false, false},
+    {MODE_INTERDIMENSIONAL, "INTERDIMENSIONAL",     "[I]", "Handshake Capture",            false, true,  false},
+    {MODE_SCHWIFTY,         "GET SCHWIFTY",         "[S]", "BLE Spam Attack",              false, false, false},
+    {MODE_WUBBA_LUBBA,      "WUBBA LUBBA",          "[W]", "GPS Wardriving",               true,  true,  false},
+    {MODE_CHILL,            "CHILL MODE",           "[C]", "Passive Observation",          false, false, false},
+    {MODE_SPECTRUM,         "MICROVERSE",           "[M]", "Spectrum Analyzer",            false, false, false},
+    {MODE_LORA_MESH,        "COUNCIL OF RICKS",     "[R]", "LoRa Mesh Network",            false, false, true},
+    {MODE_PLUMBUS,          "PLUMBUS CMD",          "[F]", "File Manager",                 false, true,  false},
+    {MODE_SETTINGS,         "WORKSHOP",             "[*]", "Settings",                     false, false, false},
 };
 
 #define MENU_MODE_COUNT 10

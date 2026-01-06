@@ -45,7 +45,7 @@ bool ble_spam_init(ble_spam_state_t* state) {
     // Get advertising instance
     pAdvertising = NimBLEDevice::getAdvertising();
 
-    Serial.println("[BLE] 🎵 Get Schwifty mode initialized");
+    Serial.println("[BLE] Get Schwifty mode initialized");
     return true;
 }
 
@@ -67,7 +67,7 @@ void ble_spam_start(ble_spam_state_t* state, ble_target_t target) {
         default:                 targetName = "ALL"; break;
     }
 
-    Serial.printf("[BLE] 🎵 GET SCHWIFTY! Spamming %s devices...\n", targetName);
+    Serial.printf("[BLE] GET SCHWIFTY! Spamming %s devices...\n", targetName);
 }
 
 void ble_spam_stop(ble_spam_state_t* state) {
@@ -118,7 +118,7 @@ void ble_spam_tick(ble_spam_state_t* state) {
 
     // Log every 100 spam
     if (state->spamCount % 100 == 0) {
-        Serial.printf("[BLE] 🎵 Schwifty count: %d\n", state->spamCount);
+        Serial.printf("[BLE] Schwifty count: %d\n", state->spamCount);
     }
 }
 

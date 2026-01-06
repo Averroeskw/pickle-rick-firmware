@@ -31,7 +31,7 @@ bool wardrive_init(wardrive_state_t* state, uint32_t max_points) {
     memset(&state->lastFix, 0, sizeof(gps_fix_t));
     state->sessionFile[0] = '\0';
 
-    Serial.println("[WARDRIVE] 🚗 Wubba Lubba Dub Dub mode initialized");
+    Serial.println("[WARDRIVE] Wubba Lubba Dub Dub mode initialized");
     return true;
 }
 
@@ -55,7 +55,7 @@ void wardrive_start(wardrive_state_t* state) {
         file.close();
     }
 
-    Serial.println("[WARDRIVE] 🚗 WUBBA LUBBA DUB DUB! Session started");
+    Serial.println("[WARDRIVE] WUBBA LUBBA DUB DUB! Session started");
     Serial.printf("[WARDRIVE] Logging to: %s\n", state->sessionFile);
 }
 
@@ -205,7 +205,7 @@ bool wardrive_export_wigle(wardrive_state_t* state, const char* filename) {
     if (!file) return false;
 
     // WiGLE header
-    file.println("WigleWifi-1.4,appRelease=PickleRick,model=K257,release=1.0,device=AVERROES,display=ST7796,board=ESP32S3,brand=LilyGo");
+    file.println("WigleWifi-1.4,appRelease=Rick,model=K257,release=1.0,device=Archie,display=ST7796,board=ESP32S3,brand=LilyGo");
     file.println(WIGLE_CSV_HEADER);
 
     for (uint32_t i = 0; i < state->pointCount; i++) {

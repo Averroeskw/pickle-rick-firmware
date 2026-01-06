@@ -12,10 +12,26 @@
 // SCANNER INITIALIZATION
 // =============================================================================
 bool scanner_init(scanner_state_t* state, uint16_t max_networks) {
+    // Try PSRAM first, fallback to regular heap
     state->networks = (network_info_t*)ps_malloc(sizeof(network_info_t) * max_networks);
     if (!state->networks) {
+        Serial.println("[SCANNER] PSRAM alloc failed, trying heap...");
+        state->networks = (network_info_t*)malloc(sizeof(network_info_t) * max_networks);
+    }
+    if (!state->networks) {
         Serial.println("[SCANNER] Failed to allocate network buffer");
-        return false;
+        // Initialize with zero capacity but don't fail - scanner can work without storage
+        state->count = 0;
+        state->capacity = 0;
+        state->currentChannel = 1;
+        state->isScanning = false;
+        state->isHopping = true;
+        state->scanStartTime = 0;
+        state->lastHopTime = 0;
+        WiFi.mode(WIFI_STA);
+        WiFi.disconnect();
+        Serial.println("[SCANNER] Initialized in limited mode (no storage)");
+        return true;  // Return true but with limited functionality
     }
 
     state->count = 0;
@@ -45,7 +61,7 @@ void scanner_start(scanner_state_t* state) {
     // Set to first channel
     esp_wifi_set_channel(state->currentChannel, WIFI_SECOND_CHAN_NONE);
 
-    Serial.println("[SCANNER] 🌀 Portal Gun activated - Scanning dimensions...");
+    Serial.println("[SCANNER] Portal Gun activated - Scanning dimensions...");
 }
 
 void scanner_stop(scanner_state_t* state) {
@@ -118,7 +134,7 @@ void scanner_tick(scanner_state_t* state) {
 
                 scanner_add_network(state, &net);
 
-                Serial.printf("[SCANNER] 🌀 Found: %s [%02X:%02X:%02X:%02X:%02X:%02X] CH:%d RSSI:%d\n",
+                Serial.printf("[SCANNER] Found: %s [%02X:%02X:%02X:%02X:%02X:%02X] CH:%d RSSI:%d\n",
                               net.hidden ? "<hidden>" : net.ssid,
                               net.bssid[0], net.bssid[1], net.bssid[2],
                               net.bssid[3], net.bssid[4], net.bssid[5],

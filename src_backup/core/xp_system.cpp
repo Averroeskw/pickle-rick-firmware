@@ -77,7 +77,7 @@ bool xp_check_rank_up(xp_stats_t* stats) {
 // PERSISTENCE
 // =============================================================================
 bool xp_save(xp_stats_t* stats) {
-    File file = SD.open("/sd/pickle_rick/xp/stats.json", FILE_WRITE);
+    File file = SD.open("/sd/rick/xp/stats.json", FILE_WRITE);
     if (!file) {
         Serial.println("[XP] Failed to save stats");
         return false;
@@ -107,7 +107,7 @@ bool xp_save(xp_stats_t* stats) {
 }
 
 bool xp_load(xp_stats_t* stats) {
-    File file = SD.open("/sd/pickle_rick/xp/stats.json", FILE_READ);
+    File file = SD.open("/sd/rick/xp/stats.json", FILE_READ);
     if (!file) {
         Serial.println("[XP] No saved stats found, starting fresh");
         return false;
@@ -189,7 +189,7 @@ void achievement_unlock(achievement_id_t id, xp_stats_t* stats) {
     achievementUnlocked[id] = true;
     stats->achievementsUnlocked++;
 
-    Serial.printf("\n[ACHIEVEMENT] 🏆 %s\n", ACHIEVEMENTS[id].name);
+    Serial.printf("\n[ACHIEVEMENT] %s\n", ACHIEVEMENTS[id].name);
     Serial.printf("[ACHIEVEMENT] %s\n", ACHIEVEMENTS[id].description);
     Serial.printf("[ACHIEVEMENT] +%d XP\n", ACHIEVEMENTS[id].xpReward);
 
@@ -271,7 +271,7 @@ bool challenge_check_complete(challenge_t* challenge, xp_stats_t* stats) {
         stats->challengesCompleted++;
         stats->totalXP += challenge->xpReward;
 
-        Serial.printf("\n[CHALLENGE] ✅ %s completed!\n", challenge->name);
+        Serial.printf("\n[CHALLENGE] DONE - %s completed!\n", challenge->name);
         Serial.printf("[CHALLENGE] +%d XP\n", challenge->xpReward);
 
         return true;

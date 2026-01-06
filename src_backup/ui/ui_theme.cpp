@@ -188,18 +188,30 @@ static void star_anim_cb(void* var, int32_t v) {
 }
 
 void ui_create_starfield(lv_obj_t* parent) {
-    // Create random stars
-    for (int i = 0; i < 20; i++) {
+    if (parent == NULL) return;
+
+    // Get dimensions with safe defaults
+    lv_coord_t w = lv_obj_get_width(parent);
+    lv_coord_t h = lv_obj_get_height(parent);
+
+    // Use screen defaults if dimensions not yet set
+    if (w <= 0) w = 222;  // SCREEN_WIDTH
+    if (h <= 0) h = 480;  // SCREEN_HEIGHT
+
+    // Create random stars (reduced count to save memory)
+    for (int i = 0; i < 12; i++) {
         lv_obj_t* star = lv_obj_create(parent);
+        if (star == NULL) continue;
+
         lv_obj_remove_style_all(star);
         lv_obj_set_size(star, 2 + (i % 3), 2 + (i % 3));
         lv_obj_set_style_bg_color(star, THEME_STAR_WHITE, 0);
         lv_obj_set_style_bg_opa(star, LV_OPA_70, 0);
         lv_obj_set_style_radius(star, LV_RADIUS_CIRCLE, 0);
 
-        // Random position
-        lv_coord_t x = (i * 37 + 13) % lv_obj_get_width(parent);
-        lv_coord_t y = (i * 23 + 7) % lv_obj_get_height(parent);
+        // Random position using safe modulo
+        lv_coord_t x = (i * 37 + 13) % w;
+        lv_coord_t y = (i * 23 + 7) % h;
         lv_obj_set_pos(star, x, y);
 
         // Twinkle animation

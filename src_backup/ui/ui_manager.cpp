@@ -22,15 +22,14 @@
 // =============================================================================
 #define SCREEN_WIDTH  222
 #define SCREEN_HEIGHT 480
-#define LV_BUF_SIZE   (SCREEN_WIDTH * 40)
+#define LV_BUF_SIZE   (SCREEN_WIDTH * 20)  // Reduced buffer for lower memory usage
 
 // TFT_eSPI instance
 static TFT_eSPI tft = TFT_eSPI();
 
-// LVGL buffers
+// LVGL buffers - single buffer to save memory
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf1[LV_BUF_SIZE];
-static lv_color_t buf2[LV_BUF_SIZE];
 
 // LVGL drivers
 static lv_disp_drv_t disp_drv;
@@ -48,11 +47,11 @@ static int32_t encoder_diff = 0;
 static bool encoder_pressed = false;
 
 // =============================================================================
-// ENCODER PINS (K257)
+// ENCODER PINS (K257 T-LoRa Pager - from pins_arduino.h)
 // =============================================================================
-#define ENC_A    18
-#define ENC_B    17
-#define ENC_BTN  0   // Boot button doubles as encoder press
+#define ENC_A    40   // ROTARY_A
+#define ENC_B    41   // ROTARY_B
+#define ENC_BTN  7    // ROTARY_C (center button)
 
 static volatile int32_t enc_count = 0;
 static int32_t last_enc_count = 0;
@@ -107,13 +106,20 @@ static void encoder_read_cb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 bool ui_init(ui_state_t* state, rick_avatar_t* rick) {
     Serial.println("[UI] Initializing LVGL...");
 
+    if (state == NULL) {
+        Serial.println("[UI] ERROR: state is NULL!");
+        return false;
+    }
+
     // Store global reference
     g_ui_state = state;
 
     // Initialize TFT
+    Serial.println("[UI] Init TFT...");
     tft.init();
     tft.setRotation(0);  // Portrait
     tft.fillScreen(TFT_BLACK);
+    Serial.println("[UI] TFT initialized");
 
     // Set backlight
     pinMode(42, OUTPUT);
@@ -131,8 +137,8 @@ bool ui_init(ui_state_t* state, rick_avatar_t* rick) {
     // Initialize LVGL
     lv_init();
 
-    // Initialize draw buffer
-    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, LV_BUF_SIZE);
+    // Initialize draw buffer (single buffer mode to save memory)
+    lv_disp_draw_buf_init(&draw_buf, buf1, NULL, LV_BUF_SIZE);
 
     // Initialize display driver
     lv_disp_drv_init(&disp_drv);
@@ -180,9 +186,16 @@ bool ui_init(ui_state_t* state, rick_avatar_t* rick) {
 void ui_create_screens(ui_state_t* state) {
     Serial.println("[UI] Creating screens...");
 
+    // Create screens one at a time with error checking
     state->screens[SCREEN_BOOT] = ui_create_boot_screen(state);
+    Serial.println("[UI] Boot screen created");
+
     state->screens[SCREEN_MENU] = ui_create_menu_screen(state);
+    Serial.println("[UI] Menu screen created");
+
     state->screens[SCREEN_PORTAL] = ui_create_portal_screen(state);
+    Serial.println("[UI] Portal screen created");
+
     state->screens[SCREEN_INTERDIMENSIONAL] = ui_create_interdimensional_screen(state);
     state->screens[SCREEN_SCHWIFTY] = ui_create_schwifty_screen(state);
     state->screens[SCREEN_WUBBA_LUBBA] = ui_create_wubba_lubba_screen(state);
@@ -191,13 +204,20 @@ void ui_create_screens(ui_state_t* state) {
     state->screens[SCREEN_PLUMBUS] = ui_create_plumbus_screen(state);
     state->screens[SCREEN_SETTINGS] = ui_create_settings_screen(state);
 
-    // Initialize with boot screen
-    lv_scr_load(state->screens[SCREEN_BOOT]);
+    // Initialize with boot screen (with null check)
+    if (state->screens[SCREEN_BOOT] != NULL) {
+        lv_scr_load(state->screens[SCREEN_BOOT]);
+    } else {
+        Serial.println("[UI] ERROR: Boot screen is NULL!");
+        return;
+    }
 
     // Auto-transition to menu after boot
     lv_timer_create([](lv_timer_t* timer) {
         ui_state_t* s = (ui_state_t*)timer->user_data;
-        ui_goto_screen(s, SCREEN_MENU);
+        if (s && s->screens[SCREEN_MENU]) {
+            ui_goto_screen(s, SCREEN_MENU);
+        }
         lv_timer_del(timer);
     }, 2500, state);
 
@@ -249,7 +269,7 @@ lv_obj_t* ui_create_boot_screen(ui_state_t* state) {
 
     // Version
     lv_obj_t* version = lv_label_create(panel);
-    lv_label_set_text(version, "v" PICKLE_RICK_VERSION);
+    lv_label_set_text(version, "v" RICK_VERSION);
     lv_obj_add_style(version, &style_label_small, 0);
     lv_obj_align(version, LV_ALIGN_TOP_MID, 0, 70);
 
@@ -1046,7 +1066,7 @@ lv_obj_t* ui_create_settings_screen(ui_state_t* state) {
     lv_obj_align(about_lbl, LV_ALIGN_TOP_LEFT, 5, 5);
 
     lv_obj_t* ver_lbl = lv_label_create(about_panel);
-    lv_label_set_text(ver_lbl, "Pickle Rick v" PICKLE_RICK_VERSION "\nBy AVERROES Tech");
+    lv_label_set_text(ver_lbl, "RICK v" RICK_VERSION "\nBy Archie");
     lv_obj_add_style(ver_lbl, &style_label_small, 0);
     lv_obj_align(ver_lbl, LV_ALIGN_BOTTOM_LEFT, 5, -5);
 
@@ -1094,9 +1114,16 @@ lv_obj_t* ui_create_footer(lv_obj_t* parent, ui_state_t* state) {
     lv_obj_add_style(footer, &style_status_bar, 0);
     lv_obj_clear_flag(footer, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Rank label
+    // Rank label with bounds checking
     lv_obj_t* rank = lv_label_create(footer);
-    const char* rank_name = state->rick ? RANK_NAMES[state->rick->rank] : "Morty";
+    const char* rank_name = "Morty";
+    uint8_t rankIdx = 0;
+    if (state && state->rick) {
+        rankIdx = (uint8_t)state->rick->rank;
+        if (rankIdx < sizeof(RANK_NAMES) / sizeof(RANK_NAMES[0])) {
+            rank_name = RANK_NAMES[rankIdx];
+        }
+    }
     lv_label_set_text(rank, rank_name);
     lv_obj_add_style(rank, &style_label_small, 0);
     lv_obj_align(rank, LV_ALIGN_TOP_LEFT, 5, 2);
@@ -1105,9 +1132,13 @@ lv_obj_t* ui_create_footer(lv_obj_t* parent, ui_state_t* state) {
     lv_obj_t* xp_bar = ui_create_progress_bar(footer, SCREEN_WIDTH - 20, 12);
     lv_obj_align(xp_bar, LV_ALIGN_BOTTOM_MID, 0, -8);
 
-    uint32_t xp = state->rick ? state->rick->xp : 0;
-    uint32_t nextXp = state->rick ? RANK_XP_THRESHOLDS[state->rick->rank + 1] : 500;
+    uint32_t xp = (state && state->rick) ? state->rick->xp : 0;
+    uint32_t nextXp = 500;
+    if (state && state->rick && rankIdx + 1 < sizeof(RANK_XP_THRESHOLDS) / sizeof(RANK_XP_THRESHOLDS[0])) {
+        nextXp = RANK_XP_THRESHOLDS[rankIdx + 1];
+    }
     int percent = nextXp > 0 ? (xp * 100 / nextXp) : 0;
+    if (percent > 100) percent = 100;
     lv_bar_set_value(xp_bar, percent, LV_ANIM_OFF);
 
     // XP text
@@ -1118,7 +1149,7 @@ lv_obj_t* ui_create_footer(lv_obj_t* parent, ui_state_t* state) {
     lv_obj_add_style(xp_lbl, &style_label_small, 0);
     lv_obj_align(xp_lbl, LV_ALIGN_TOP_RIGHT, -5, 2);
 
-    state->xpBar = xp_bar;
+    if (state) state->xpBar = xp_bar;
 
     return footer;
 }

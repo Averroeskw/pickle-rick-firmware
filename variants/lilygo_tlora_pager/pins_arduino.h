@@ -91,7 +91,7 @@ static const uint8_t SCK = 35;
 #define USING_BQ_GAUGE
 #define USING_INPUT_DEV_ROTARY
 #define USING_INPUT_DEV_KEYBOARD
-// #define USING_ST25R3916  // Disabled - requires complete NFC library
+#define USING_ST25R3916
 #define USING_BHI260_SENSOR
 #define HAS_SD_CARD_SOCKET
 

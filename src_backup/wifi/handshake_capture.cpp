@@ -29,7 +29,7 @@ bool capture_init(capture_state_t* state, uint16_t max_handshakes, uint16_t max_
     state->isCapturing = false;
     state->captureStartTime = 0;
 
-    Serial.println("[CAPTURE] 📺 Interdimensional Cable initialized");
+    Serial.println("[CAPTURE] Interdimensional Cable initialized");
     return true;
 }
 
@@ -42,7 +42,7 @@ void capture_start_target(capture_state_t* state, const uint8_t* bssid, const ch
     state->isCapturing = true;
     state->captureStartTime = millis();
 
-    Serial.printf("[CAPTURE] 📺 Targeting: %s [%02X:%02X:%02X:%02X:%02X:%02X]\n",
+    Serial.printf("[CAPTURE] Targeting: %s [%02X:%02X:%02X:%02X:%02X:%02X]\n",
                   ssid,
                   bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 }
@@ -52,7 +52,7 @@ void capture_start_all(capture_state_t* state) {
     state->isCapturing = true;
     state->captureStartTime = millis();
 
-    Serial.println("[CAPTURE] 📺 Capturing all interdimensional signals...");
+    Serial.println("[CAPTURE] Capturing all interdimensional signals...");
 }
 
 void capture_stop(capture_state_t* state) {
@@ -152,7 +152,7 @@ void capture_process_eapol(capture_state_t* state, const uint8_t* packet, uint16
     if ((hs->hasFrame1 && hs->hasFrame2) || (hs->hasFrame2 && hs->hasFrame3)) {
         if (!hs->complete) {
             hs->complete = true;
-            Serial.printf("\n[CAPTURE] ✅ HANDSHAKE CAPTURED for %02X:%02X:%02X:%02X:%02X:%02X!\n",
+            Serial.printf("\n[CAPTURE] HANDSHAKE CAPTURED for %02X:%02X:%02X:%02X:%02X:%02X!\n",
                           hs->bssid[0], hs->bssid[1], hs->bssid[2],
                           hs->bssid[3], hs->bssid[4], hs->bssid[5]);
         }
@@ -202,7 +202,7 @@ void capture_process_beacon(capture_state_t* state, const uint8_t* packet, uint1
                     pmkid->captureTime = millis();
                     state->pmkidCount++;
 
-                    Serial.printf("\n[CAPTURE] ✅ PMKID EXTRACTED for %02X:%02X:%02X:%02X:%02X:%02X!\n",
+                    Serial.printf("\n[CAPTURE] PMKID EXTRACTED for %02X:%02X:%02X:%02X:%02X:%02X!\n",
                                   bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
                 }
             }

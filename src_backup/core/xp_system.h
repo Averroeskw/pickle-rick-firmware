@@ -136,24 +136,24 @@ void challenge_update(challenge_t* challenge, uint32_t progress);
 bool challenge_check_complete(challenge_t* challenge, xp_stats_t* stats);
 
 // =============================================================================
-// ACHIEVEMENT DEFINITIONS
+// ACHIEVEMENT DEFINITIONS - Using ASCII icons (emojis crash ESP32)
 // =============================================================================
 static const achievement_t ACHIEVEMENTS[] = {
-    {ACH_WUBBA_LUBBA, "Wubba Lubba Dub Dub", "First boot completed", "🎉", 100, false, 0},
-    {ACH_IM_PICKLE_RICK, "I'm Pickle Rick!", "Capture 100 handshakes", "🥒", 1000, false, 0},
-    {ACH_GET_SCHWIFTY, "Get Schwifty", "BLE spam 1000 devices", "🎵", 500, false, 0},
-    {ACH_PORTAL_HOPPER, "Portal Hopper", "Scan in 5 different locations", "🌀", 300, false, 0},
-    {ACH_COUNCIL_OF_RICKS, "Council of Ricks", "Reach maximum rank", "👑", 5000, false, 0},
-    {ACH_PLUMBUS_MASTER, "Plumbus Master", "Manage 100 files", "🔧", 200, false, 0},
-    {ACH_MEESEEKS_BOX, "Meeseeks Box", "Complete 50 challenges", "📦", 750, false, 0},
-    {ACH_MICROVERSE, "Microverse", "Use spectrum mode for 1 hour total", "🔬", 400, false, 0},
-    {ACH_INTERDIMENSIONAL, "Interdimensional Cable", "Capture all auth types", "📺", 800, false, 0},
-    {ACH_SHOW_ME_WHAT_YOU_GOT, "Show Me What You Got", "Capture first handshake", "✊", 150, false, 0},
-    {ACH_TINY_RICK, "Tiny Rick!", "Use power save mode", "🔋", 100, false, 0},
-    {ACH_SCARY_TERRY, "Scary Terry", "Deauth 100 clients", "😈", 500, false, 0},
-    {ACH_BIRD_PERSON, "Bird Person", "Send 100 LoRa messages", "🦅", 350, false, 0},
-    {ACH_SQUANCHY, "Squanchy", "Use all modes in one session", "🎊", 600, false, 0},
-    {ACH_EVIL_MORTY, "Evil Morty", "Detect a rogue access point", "🎭", 1000, false, 0},
+    {ACH_WUBBA_LUBBA, "Wubba Lubba Dub Dub", "First boot completed", "[!]", 100, false, 0},
+    {ACH_IM_PICKLE_RICK, "I'm Pickle Rick!", "Capture 100 handshakes", "[P]", 1000, false, 0},
+    {ACH_GET_SCHWIFTY, "Get Schwifty", "BLE spam 1000 devices", "[S]", 500, false, 0},
+    {ACH_PORTAL_HOPPER, "Portal Hopper", "Scan in 5 different locations", "[O]", 300, false, 0},
+    {ACH_COUNCIL_OF_RICKS, "Council of Ricks", "Reach maximum rank", "[*]", 5000, false, 0},
+    {ACH_PLUMBUS_MASTER, "Plumbus Master", "Manage 100 files", "[T]", 200, false, 0},
+    {ACH_MEESEEKS_BOX, "Meeseeks Box", "Complete 50 challenges", "[B]", 750, false, 0},
+    {ACH_MICROVERSE, "Microverse", "Use spectrum mode for 1 hour total", "[M]", 400, false, 0},
+    {ACH_INTERDIMENSIONAL, "Interdimensional Cable", "Capture all auth types", "[I]", 800, false, 0},
+    {ACH_SHOW_ME_WHAT_YOU_GOT, "Show Me What You Got", "Capture first handshake", "[G]", 150, false, 0},
+    {ACH_TINY_RICK, "Tiny Rick!", "Use power save mode", "[+]", 100, false, 0},
+    {ACH_SCARY_TERRY, "Scary Terry", "Deauth 100 clients", "[X]", 500, false, 0},
+    {ACH_BIRD_PERSON, "Bird Person", "Send 100 LoRa messages", "[>]", 350, false, 0},
+    {ACH_SQUANCHY, "Squanchy", "Use all modes in one session", "[#]", 600, false, 0},
+    {ACH_EVIL_MORTY, "Evil Morty", "Detect a rogue access point", "[E]", 1000, false, 0},
     // Add more achievements to reach 63...
 };
 

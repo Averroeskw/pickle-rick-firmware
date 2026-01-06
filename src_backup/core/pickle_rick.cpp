@@ -158,29 +158,30 @@ const char* rick_rank_name(rick_rank_t rank) {
 }
 
 const char* rick_rank_icon(rick_rank_t rank) {
+    // ASCII icons (emojis crash ESP32)
     static const char* icons[] = {
-        "🥴", // Morty
-        "📱", // Summer
-        "🐴", // Beth
-        "😰", // Jerry
-        "👋", // Mr. Meeseeks
-        "😈", // Scary Terry
-        "🦅", // Birdperson
-        "🎉", // Squanchy
-        "💜", // Unity
-        "🔫", // Krombopulos
-        "🎭", // Evil Morty
-        "🥒", // Pickle Rick
-        "☣️", // Toxic Rick
-        "🎸", // Tiny Rick
-        "🍪", // Doofus Rick
-        "👑", // Council Rick
-        "⭐", // Rick Prime
-        "🌀", // C-137
-        "🚀", // Portal Master
-        "🌌", // Dimension Hopper
-        "🔱"  // Multiverse God
+        "[M]", // Morty
+        "[Su]", // Summer
+        "[Be]", // Beth
+        "[Je]", // Jerry
+        "[Mx]", // Mr. Meeseeks
+        "[ST]", // Scary Terry
+        "[BP]", // Birdperson
+        "[Sq]", // Squanchy
+        "[Un]", // Unity
+        "[KM]", // Krombopulos
+        "[EM]", // Evil Morty
+        "[PR]", // Pickle Rick
+        "[TX]", // Toxic Rick
+        "[TR]", // Tiny Rick
+        "[DR]", // Doofus Rick
+        "[CR]", // Council Rick
+        "[RP]", // Rick Prime
+        "[137]", // C-137
+        "[PM]", // Portal Master
+        "[DH]", // Dimension Hopper
+        "[MG]"  // Multiverse God
     };
-    if (rank >= RANK_MAX) return "❓";
+    if (rank >= RANK_MAX) return "[?]";
     return icons[rank];
 }
